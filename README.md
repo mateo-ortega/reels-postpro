@@ -1,170 +1,199 @@
-# Reels Postpro — Sapiens
+# Reels Postpro
 
-Postproducción local de Reels de Instagram bajo la identidad visual de Sapiens.
-Sube `.mp4` o `.mov`, limpia el audio, transcribe, edita subtítulos en una tabla
-y descarga el video final con subtítulos quemados al estilo Sapiens.
+Desktop application for Instagram Reels post-production under the Sapiens visual identity. Cleans the audio (high-pass + DeepFilterNet 3 denoising + loudnorm to -16 LUFS), transcribes Spanish speech with OpenAI Whisper small, and burns Sapiens styled Quote-Card subtitles using libass through ffmpeg. Optional OpenCV face detection keeps the hook clear of the speaker's face.
 
----
+Built with a Gradio web UI for end-to-end editing of the subtitle table before render. CPU only, runs locally without GPU.
+
+## Features
+
+* **5-stage CPU pipeline**: extract audio, high-pass 80 Hz, DeepFilterNet 3 denoise, loudnorm to -16 LUFS, mux back with the original video (`-c:v copy`).
+* **Spanish transcription** via Whisper small with word-level timestamps.
+* **Quote-Card subtitle style** (Sapiens): a single CAPS hook left-aligned with decorative quotes in the accent color, plus body blocks of 2 to 3 words in white.
+* **Inline keyword highlighting** by wrapping a word in `*asterisks*` in the editable table; that word is rendered in the accent color (teal `#2B9E8F` or gold `#E8A838`).
+* **Editable cue table** in the Gradio UI: text, timing and role (hook / body) can be corrected before re-rendering.
+* **Automatic hook placement** using OpenCV Haar cascade face detection over the hook timespan, with a manual override (bottom) when needed.
+* **Per-upload session directory** under `workspace/sessions/<uuid>/` keeps every intermediate artifact for inspection (raw HP wav, denoised wav, normalized wav, Whisper JSON, cues, SRT, ASS, final mp4).
+* **One-shot Windows installer** (`install.ps1`) that creates the venv, installs PyTorch CPU and the rest of the stack, and stages the Sapiens fonts.
 
 ## Pipeline
 
 ```
-Video crudo (.mp4 o .mov)
-   ↓
-1. Audio (prioridad)
-     extract  →  high-pass 80Hz  →  DeepFilterNet 3  →  loudnorm -16 LUFS
-   ↓
-2. Mux audio limpio + video original (-c:v copy)
-   ↓
+Raw video (.mp4 / .mov)
+   |
+   v
+1. Audio
+     extract  ->  high-pass 80 Hz  ->  DeepFilterNet 3  ->  loudnorm -16 LUFS
+   |
+   v
+2. Mux clean audio + original video (-c:v copy)
+   |
+   v
 3. Whisper small (es, word_timestamps)
-   ↓
-4. Subtítulos (estilo Quote-Card)
-     Hook  = frase completa de apertura, CAPS left-aligned, " + keyword en color acento
-     Body  = bloques de 2-3 palabras, blanco Outfit Black
-   ↓
-5. Render final
-     ffmpeg -vf ass=… -c:v libx264 -crf 18 -preset slow
-     MarginV=420 (safe zone IG)
+   |
+   v
+4. Subtitles (Quote-Card style)
+     Hook  = full opening sentence, CAPS left-aligned, " + keyword in accent color
+     Body  = 2 to 3 word blocks, white Outfit Black
+   |
+   v
+5. Final render
+     ffmpeg -vf ass=... -c:v libx264 -crf 18 -preset slow
+     MarginV in the IG vertical safe zone
 ```
 
----
+## Tech Stack
 
-## Instalación (una sola vez)
+* Python 3.11+
+* [Gradio](https://www.gradio.app/) 5.x for the web UI
+* [OpenAI Whisper](https://github.com/openai/whisper) small, Spanish, word timestamps
+* [DeepFilterNet](https://github.com/Rikorose/DeepFilterNet) 3 for speech enhancement
+* [OpenCV](https://opencv.org/) Haar cascades for face detection
+* PyTorch 2.2 CPU + Torchaudio
+* ffmpeg full build (libass + libx264) on PATH
 
-Requisitos previos en `PATH`:
+## Installation
 
-- Python 3.11+
-- ffmpeg (full build de https://www.gyan.dev/ffmpeg/builds/)
+Prerequisites on PATH:
+
+* Python 3.11+
+* ffmpeg full build from https://www.gyan.dev/ffmpeg/builds/ (the libass enabled one)
 
 ```powershell
+git clone https://github.com/mateo-ortega/reels-postpro.git
 cd reels-postpro
 powershell -ExecutionPolicy Bypass -File install.ps1
 ```
 
-El script:
-1. Verifica ffmpeg.
-2. Crea `.venv\` con Python.
-3. Instala PyTorch CPU (≈ 200 MB) + Whisper + DeepFilterNet + Gradio.
-4. Copia la font Sapiens (`Outfit-Black.ttf`) desde `..\skills\sapiens-carrusel\assets\` a `assets\fonts\`.
+The install script:
 
-La primera ejecución de Whisper descarga el modelo `small` (~466 MB) a tu cache HF.
+1. Verifies ffmpeg is reachable.
+2. Creates `.venv\` with the system Python.
+3. Installs PyTorch CPU (~200 MB) + Whisper + DeepFilterNet + Gradio.
+4. Stages Sapiens fonts into `assets\fonts\`. The renderer expects `Outfit-Black.ttf` in that directory; place it manually if you do not have a Sapiens font bundle to copy from.
 
----
+First Whisper run downloads the `small` model (~466 MB) into your HuggingFace cache.
 
-## Uso
+## Usage
 
 ```powershell
-cd reels-postpro
 .\.venv\Scripts\Activate.ps1
 python app.py
 ```
 
-La UI abre en http://localhost:7860.
+The UI opens at http://localhost:7860.
 
-### Flujo
+### Workflow
 
-1. **Subir video** (`.mp4` o `.mov`).
-2. Ajustar opcionalmente:
-   - **Palabras por bloque** (2 ó 3, default 3).
-   - **Duración máxima del hook** (5-30 s, default 30 s — frase completa de apertura).
-   - **Color de acento**: `teal` (#2B9E8F) o `gold` (#E8A838).
-3. Click en **Procesar audio + transcribir**.
-4. Cuando termine, revisar la **tabla de subtítulos**:
-   - Editar texto si Whisper se equivocó.
-   - Ajustar timing si hace falta.
-   - Cambiar `role` (`hook` o `body`) si necesitas reasignar.
-   - Marcar la keyword principal con `*asteriscos*` para resaltarla en el color de acento (ej: `INTENTAR PROHIBIR *INTELIGENCIA ARTIFICIAL* EN CASA`).
-5. Click en **Guardar cambios** (escribe `cues.json`, `subtitles.srt`, `subtitles.ass`).
-6. Click en **Renderizar final**.
-7. Reproducir el preview o descargar `final.mp4`.
+1. Upload a vertical Reel (`.mp4` or `.mov`).
+2. Tune the options if needed:
+   * **Words per body block** (2 or 3, default 3).
+   * **Max hook duration** (1 to 30 s, default 30 s, used to cap the opening sentence).
+   * **Accent color**: `teal` (#2B9E8F) or `gold` (#E8A838).
+   * **Hook position**: `auto` (face-aware) or `abajo` (force bottom).
+3. Click **Procesar audio + transcribir**.
+4. Review the **subtitle table**:
+   * Edit the text if Whisper misheard a word.
+   * Adjust timing if needed.
+   * Change `role` (`hook` or `body`) to reassign blocks.
+   * Wrap the primary keyword in `*asterisks*` to highlight it in the accent color (example: `INTENTAR PROHIBIR *INTELIGENCIA ARTIFICIAL* EN CASA`).
+5. Click **Guardar cambios** (writes `cues.json`, `subtitles.srt`, `subtitles.ass`).
+6. Click **Renderizar final**.
+7. Preview or download `final.mp4`.
 
-### Opciones avanzadas (acordeón)
-
-- `--atten-lim` de DeepFilterNet (30-100, default 100). Bajalo si la voz suena "robótica" en clips muy ruidosos.
-- Saltar high-pass / loudnorm (no recomendado).
-
----
-
-## Estructura
+## Project Structure
 
 ```
 reels-postpro/
-├── app.py                         # UI Gradio
-├── install.ps1                    # instalador one-shot
+├── app.py                            Gradio UI entry point
+├── install.ps1                       One-shot Windows installer
 ├── requirements.txt
+├── LICENSE
+├── README.md
 ├── pipeline/
-│   ├── audio.py                   # high-pass + DeepFilterNet + loudnorm + mux
-│   ├── transcribe.py              # Whisper small ES
-│   ├── subtitles.py               # Cue, SRT, ASS Sapiens
-│   ├── render.py                  # ffmpeg burn final
-│   └── paths.py                   # sesiones + cleanup
-├── assets/fonts/                  # Outfit-Bold, InstrumentSans-Bold (poblado por install.ps1)
-└── workspace/sessions/<uuid>/     # cada upload genera una sesion aislada
+│   ├── audio.py                      High-pass, DeepFilterNet, loudnorm, mux
+│   ├── transcribe.py                 Whisper small ES
+│   ├── subtitles.py                  Cue model, SRT and ASS (Sapiens) writers
+│   ├── render.py                     ffmpeg subtitle burn (auto-install fonts)
+│   ├── face.py                       OpenCV face detection for hook layout
+│   └── paths.py                      Session management and cleanup
+├── scripts/
+│   └── preview_subtitle_style.py     Standalone ASS style preview helper
+├── assets/
+│   └── fonts/                        Brand fonts (populated by install.ps1)
+└── workspace/
+    └── sessions/<uuid>/              Per-upload working directory (gitignored)
         ├── original.mp4|mov
-        ├── 01_raw_hp.wav          # despues de high-pass
-        ├── 02_denoised.wav        # despues de DeepFilterNet
-        ├── 03_normalized.wav      # despues de loudnorm -16 LUFS
-        ├── video_clean.mp4        # video original + audio limpio
-        ├── whisper_result.json    # output crudo de Whisper
-        ├── cues.json              # source of truth de subtitulos
-        ├── subtitles.srt          # export legible
-        ├── subtitles.ass          # estilizado Sapiens (regenerado en cada render)
-        └── final.mp4              # video con subtitulos quemados
+        ├── 01_raw_hp.wav             after high-pass
+        ├── 02_denoised.wav           after DeepFilterNet
+        ├── 03_normalized.wav         after loudnorm -16 LUFS
+        ├── video_clean.mp4           original video + clean audio
+        ├── whisper_result.json       raw Whisper output
+        ├── cues.json                 source of truth for subtitles
+        ├── subtitles.srt             readable export
+        ├── subtitles.ass             Sapiens styled (regenerated on each render)
+        ├── face_envelope.json        face detection result over the hook
+        └── final.mp4                 final video with burned-in subtitles
 ```
 
----
+## Sapiens Style Specification
 
-## Verificación end-to-end
+| Element | Value |
+|---|---|
+| Hook font | Outfit Black, 90pt |
+| Body font | Outfit Black, 72pt |
+| Base color | `#FFFFFF` (white) |
+| Accent color | `#2B9E8F` teal (default) or `#E8A838` gold |
+| Outline | None (Outline = 0) |
+| Shadow | 2px blur |
+| Tracking | -1 (HOOK_SPACING) |
+| Alignment | Bottom-left (Alignment = 1 in ASS) |
+| MarginV | 360 (Instagram 1080x1920 safe zone) |
+| MarginL / MarginR | 75 |
+| Hook | CAPS, `"` decorative quotes in accent, keyword wrapped in `*...*` rendered in accent |
+| Hook wrap | Max 18 chars per line at 90pt |
+| Hook duration | Full opening sentence, up to 30 s |
+| Body | 2 to 3 words per block, 120 ms fade in / out |
+| Final codec | libx264, CRF 18, preset slow, yuv420p |
 
-1. Sube un clip vertical de ~15 s `.mp4`.
-2. Tras procesar, abre `workspace\sessions\<id>\` y compara `01_raw_hp.wav` vs `03_normalized.wav` en Audacity — el segundo debe sonar limpio y al mismo nivel.
-3. La tabla muestra 1 fila `role=hook` (todo MAYÚSCULAS) y N filas `role=body` (2-3 palabras).
-4. Renderiza y reproduce `final.mp4`:
-   - Hook en gold, body en blanco.
-   - Subtítulos por encima de la zona de captions de IG (MarginV ≈ 420).
-5. Repite con un `.mov` de iPhone — debe funcionar idéntico.
+## End-to-end Verification
 
-Verificación de loudness:
+1. Upload a vertical ~15 s `.mp4` clip.
+2. After processing, open `workspace\sessions\<id>\` and compare `01_raw_hp.wav` against `03_normalized.wav` in Audacity. The second should sound clean and consistently leveled.
+3. The cue table should show one `role=hook` row (all caps) and N `role=body` rows (2 to 3 words each).
+4. Render and play `final.mp4`:
+   * Hook in the accent color, body in white.
+   * Subtitles sit above the Instagram caption area (MarginV ~ 360).
+5. Repeat with a `.mov` from an iPhone, should behave identically.
+
+Loudness check:
+
 ```powershell
 ffmpeg -i workspace\sessions\<id>\03_normalized.wav -af loudnorm=I=-16:print_format=summary -f null -
 ```
-`Input Integrated` debería estar cerca de `-16 LUFS`.
 
----
+`Input Integrated` should land near `-16 LUFS`.
 
-## Estilo Sapiens aplicado — Quote-Card
+## Known Limitations
 
-| Elemento | Valor |
-|---|---|
-| Fuente hook | Outfit Black, 90pt |
-| Fuente body | Outfit Black, 72pt |
-| Color base | `#FFFFFF` (blanco) |
-| Color acento | `#2B9E8F` teal (default) o `#E8A838` gold |
-| Outline | Ninguno (Outline=0) |
-| Shadow | 2px blur |
-| Tracking | -1 (HOOK_SPACING) |
-| Alineación | Bottom-left (Alignment=1 en ASS) |
-| MarginV | 360 (safe zone IG vertical 1080×1920) |
-| MarginL/R | 75 |
-| Hook | CAPS, comillas `"` en acento inline, keyword `*...*` en acento |
-| Hook wrap | Máx 18 chars por línea a 90pt |
-| Hook duración | Frase completa (hasta 30 s) |
-| Body | 2-3 palabras por bloque, fade in/out 120 ms |
-| Codec final | libx264, CRF 18, preset slow, yuv420p |
-
----
-
-## Limitaciones conocidas
-
-- Solo CPU (este equipo no tiene GPU NVIDIA). Whisper-small en CPU procesa ~30-60 s por minuto de audio.
-- Solo español (`language="es"`).
-- Un video por vez (no batch).
-- No sube a Drive ni publica — descarga manual.
+* CPU only (no NVIDIA GPU on this machine). Whisper small on CPU processes ~30 to 60 s per minute of audio.
+* Spanish only (`language="es"`).
+* One video at a time, no batch mode.
+* No upload to Drive, no auto-publish. Final mp4 is downloaded manually from the UI.
+* Windows only installer. The Python code itself is cross-platform but `install.ps1` and the user-font auto-install in `pipeline/render.py` target Windows.
 
 ## Troubleshooting
 
-- **"ffmpeg no encontrado"** → instala el full build de Gyan y agrégalo al PATH.
-- **Voz "robótica" después del denoise** → en Opciones avanzadas, baja `--atten-lim` a 50 ó 30.
-- **Audio mudo en final.mp4** → verifica que `03_normalized.wav` no esté vacío; si lo está, revisa el log de loudnorm en consola.
-- **Whisper tarda mucho** → con CPU es esperado; un Reel de 60 s tarda ~3-5 min.
-- **Fonts no aparecen** → verifica `assets\fonts\Outfit-Black.ttf`. Re-corre `install.ps1`.
+* **"ffmpeg not found"**: install the full Gyan build and add it to PATH.
+* **Robotic voice after denoising**: in the advanced options, lower DeepFilterNet `--atten-lim` to 50 or 30.
+* **Silent audio in `final.mp4`**: verify `03_normalized.wav` is not empty, otherwise check the loudnorm log in the console.
+* **Whisper takes too long**: expected on CPU, a 60 s Reel takes ~3 to 5 minutes.
+* **Fonts not rendering**: confirm `assets\fonts\Outfit-Black.ttf` exists, then re-run `install.ps1`. On Windows the renderer also copies the fonts into `%LOCALAPPDATA%\Microsoft\Windows\Fonts` so libass can pick them up without `fontsdir`.
+
+## License
+
+[MIT](LICENSE)
+
+## Author
+
+**Mateo Ortega**
+[teo.ritmos@gmail.com](mailto:teo.ritmos@gmail.com) · [github.com/mateo-ortega](https://github.com/mateo-ortega)
