@@ -134,25 +134,6 @@ reels-postpro/
         └── final.mp4                 final video with burned-in subtitles
 ```
 
-## Sapiens Style Specification
-
-| Element | Value |
-|---|---|
-| Hook font | Outfit Black, 90pt |
-| Body font | Outfit Black, 72pt |
-| Base color | `#FFFFFF` (white) |
-| Accent color | `#2B9E8F` teal (default) or `#E8A838` gold |
-| Outline | None (Outline = 0) |
-| Shadow | 2px blur |
-| Tracking | -1 (HOOK_SPACING) |
-| Alignment | Bottom-left (Alignment = 1 in ASS) |
-| MarginV | 360 (Instagram 1080x1920 safe zone) |
-| MarginL / MarginR | 75 |
-| Hook | CAPS, `"` decorative quotes in accent, keyword wrapped in `*...*` rendered in accent |
-| Hook wrap | Max 18 chars per line at 90pt |
-| Hook duration | Full opening sentence, up to 30 s |
-| Body | 2 to 3 words per block, 120 ms fade in / out |
-| Final codec | libx264, CRF 18, preset slow, yuv420p |
 
 ## End-to-end Verification
 
@@ -171,14 +152,6 @@ ffmpeg -i workspace\sessions\<id>\03_normalized.wav -af loudnorm=I=-16:print_for
 ```
 
 `Input Integrated` should land near `-16 LUFS`.
-
-## Known Limitations
-
-* CPU only (no NVIDIA GPU on this machine). Whisper small on CPU processes ~30 to 60 s per minute of audio.
-* Spanish only (`language="es"`).
-* One video at a time, no batch mode.
-* No upload to Drive, no auto-publish. Final mp4 is downloaded manually from the UI.
-* Windows only installer. The Python code itself is cross-platform but `install.ps1` and the user-font auto-install in `pipeline/render.py` target Windows.
 
 ## Troubleshooting
 
