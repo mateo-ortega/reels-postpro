@@ -13,7 +13,6 @@ Built with a Gradio web UI for end-to-end editing of the subtitle table before r
 * **Editable cue table** in the Gradio UI: text, timing and role (hook / body) can be corrected before re-rendering.
 * **Automatic hook placement** using OpenCV Haar cascade face detection over the hook timespan, with a manual override (bottom) when needed.
 * **Per-upload session directory** under `workspace/sessions/<uuid>/` keeps every intermediate artifact for inspection (raw HP wav, denoised wav, normalized wav, Whisper JSON, cues, SRT, ASS, final mp4).
-* **One-shot Windows installer** (`install.ps1`) that creates the venv, installs PyTorch CPU and the rest of the stack, and stages the Sapiens fonts.
 
 ## Pipeline
 
