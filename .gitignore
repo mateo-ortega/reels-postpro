@@ -1,0 +1,11 @@
+.venv/
+workspace/sessions/
+__pycache__/
+*.pyc
+*.log
+assets/fonts/*.ttf
+!assets/fonts/.gitkeep
+.env
+.env.*
+.vscode/
+.idea/
