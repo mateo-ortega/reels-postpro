@@ -153,6 +153,22 @@ ffmpeg -i workspace\sessions\<id>\03_normalized.wav -af loudnorm=I=-16:print_for
 
 `Input Integrated` should land near `-16 LUFS`.
 
+## How It Works
+
+* **High-pass filter at 80 Hz**: a brick-wall high-pass removes sub-bass rumble (air conditioning, handling noise, floor vibration) before feeding the signal to DeepFilterNet. This prevents the noise suppressor from wasting its dynamic range on frequencies that are irrelevant to speech.
+
+* **DeepFilterNet 3**: a real-time speech enhancement model that operates in the frequency domain. It applies a learned suppression mask per frequency band per frame, distinguishing speech-like periodic structure from stochastic noise. The `--atten-lim` parameter (0 to 100) caps the maximum suppression in dB per band; lowering it from 100 preserves more of the room ambience if the default sounds over-processed.
+
+* **Loudnorm to -16 LUFS**: Instagram normalizes uploaded audio to approximately -14 LUFS, and some encoders clip louder uploads. Targeting -16 LUFS leaves headroom without going so low that the track sounds quiet on device speakers. The ffmpeg `loudnorm` filter runs two passes internally: the first measures the integrated loudness, the second applies the exact gain correction.
+
+* **Mux with `-c:v copy`**: after processing the audio, the clean WAV is multiplexed back with the original video stream using stream-copy (`-c:v copy`). No re-encoding happens on the video at this stage, so there is no generation loss and the mux is nearly instant regardless of clip length.
+
+* **Whisper word timestamps**: the `word_timestamps=True` flag asks Whisper to run an additional forced-alignment pass after transcription, producing per-word start and end times instead of per-segment times. These are the raw material for the 2 to 3 word body chunks and for the hook duration logic.
+
+* **ASS subtitle format**: Advanced SubStation Alpha (ASS) is the subtitle format natively supported by libass, the subtitle renderer inside ffmpeg. It supports per-style overrides, inline color tags (`{\c&H...&}`), letter-spacing (`{\fsp...}`), and fade effects (`{\fad(in_ms, out_ms)}`), all of which are used to implement the Sapiens Quote-Card style. SRT, by contrast, supports none of these.
+
+* **Font auto-install**: `pipeline/render.py` copies every `.ttf` in `assets/fonts/` into `%LOCALAPPDATA%\Microsoft\Windows\Fonts` before calling ffmpeg. Windows 10+ allows per-user font installation without admin rights, and libass picks up fonts from that directory automatically, avoiding the `fontsdir` ffmpeg option which does not accept paths with spaces on Windows.
+
 ## Troubleshooting
 
 * **"ffmpeg not found"**: install the full Gyan build and add it to PATH.
