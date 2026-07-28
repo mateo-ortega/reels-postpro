@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -48,21 +49,42 @@ def _run_cwd(cmd: list[str], *, cwd: Path) -> None:
         raise AudioError(f"Ejecutable no encontrado: {cmd[0]}") from exc
 
 
-_WIN_USER_FONTS = Path.home() / "AppData" / "Local" / "Microsoft" / "Windows" / "Fonts"
+def _user_fonts_dir() -> Path:
+    """Directorio de fonts por usuario que libass descubre automaticamente."""
+    if sys.platform == "win32":
+        # Windows 10+: instala fonts por usuario sin admin.
+        return Path.home() / "AppData" / "Local" / "Microsoft" / "Windows" / "Fonts"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Fonts"
+    # Linux: fontconfig descubre ~/.local/share/fonts.
+    return Path.home() / ".local" / "share" / "fonts"
 
 
 def _ensure_user_fonts(fonts_dir: Path) -> None:
-    """Copia las fonts Sapiens al directorio de fonts de usuario de Windows.
+    """Copia las fonts Sapiens al directorio de fonts de usuario del SO.
 
-    Windows 10+ permite instalar fonts por usuario sin privilegios de admin.
-    libass las encuentra automaticamente desde ahi sin necesidad de fontsdir.
-    Solo copia si el archivo no existe ya (idempotente).
+    libass las encuentra automaticamente desde ahi sin necesidad de fontsdir
+    (en Windows el path con drive letter 'C:' rompe el parser del filtro ass).
+    Solo copia si el archivo no existe ya (idempotente). En Linux/macOS refresca
+    la cache de fontconfig para que libass vea las fonts en esta misma ejecucion.
     """
-    _WIN_USER_FONTS.mkdir(parents=True, exist_ok=True)
+    user_fonts = _user_fonts_dir()
+    user_fonts.mkdir(parents=True, exist_ok=True)
+    changed = False
     for ttf in fonts_dir.glob("*.ttf"):
-        dst = _WIN_USER_FONTS / ttf.name
+        dst = user_fonts / ttf.name
         if not dst.exists():
             shutil.copyfile(ttf, dst)
+            changed = True
+
+    if changed and sys.platform != "win32":
+        try:
+            subprocess.run(
+                ["fc-cache", "-f", str(user_fonts)],
+                capture_output=True, check=False,
+            )
+        except FileNotFoundError:
+            pass  # sin fontconfig; libass puede usar su propio escaneo
 
 
 def _stage_ass(ass_path: Path) -> tuple[Path, Path]:

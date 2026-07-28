@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import gradio as gr
@@ -24,6 +25,7 @@ from pipeline import (
     render,
     transcribe,
 )
+from pipeline.paths import cleanup_after_render, purge_old_sessions
 from pipeline.subtitles import (
     DATAFRAME_HEADERS,
     build_cues,
@@ -81,6 +83,7 @@ def do_process(
     hook_max_seconds,
     color_scheme,
     hook_position,
+    language,
     state,
     progress=gr.Progress(track_tqdm=False),
 ):
@@ -105,8 +108,11 @@ def do_process(
         opts = audio_mod.AudioOptions()
         video_clean = audio_mod.process_audio_full(original, sdir, options=opts)
 
-        progress(0.55, desc="Transcribiendo con Whisper (puede tardar)...")
-        result = transcribe.whisper_transcribe(video_clean)
+        lang = (language or "es").strip().lower()
+        if lang not in ("es", "en"):
+            lang = "es"
+        progress(0.55, desc=f"Transcribiendo con Whisper [{lang}] (puede tardar)...")
+        result = transcribe.whisper_transcribe(video_clean, language=lang)
         (sdir / "whisper_result.json").write_text(
             json.dumps(result, ensure_ascii=False), encoding="utf-8",
         )
@@ -143,6 +149,7 @@ def do_process(
             "hook_max_seconds": float(hook_max_seconds),
             "color_scheme": color_scheme,
             "hook_position": hook_position,
+            "language": lang,
         }
         face_msg = (
             f"cara detectada (conf {envelope.confidence:.0%})"
@@ -250,17 +257,24 @@ def do_render(rows, color_scheme, hook_position, state, progress=gr.Progress(tra
         return None, None, f"ERROR renderizando: {exc}"
 
     progress(1.0, desc="Render listo.")
+    cleanup_after_render(sdir)
     return str(final), str(final), f"Render OK: {final.name} ({final.stat().st_size//1024} KB)"
 
 
 def do_open_session(state):
-    """Abre la carpeta de la sesion en el Explorer (util para inspeccion)."""
+    """Abre la carpeta de la sesion en el gestor de archivos (util para inspeccion)."""
     if not state or not state.get("session_dir"):
         return "No hay sesion activa."
     sdir = Path(state["session_dir"])
+    if sys.platform == "win32":
+        opener = ["explorer", str(sdir)]
+    elif sys.platform == "darwin":
+        opener = ["open", str(sdir)]
+    else:
+        opener = ["xdg-open", str(sdir)]
     try:
-        subprocess.Popen(["explorer", str(sdir)])
-        return f"Abriendo {sdir} en Explorer..."
+        subprocess.Popen(opener)
+        return f"Abriendo {sdir}..."
     except Exception as exc:
         return f"No se pudo abrir: {exc}"
 
@@ -313,6 +327,11 @@ def build_ui() -> gr.Blocks:
                 value="auto",
                 label="Posicion del hook (auto = detectar cara)",
             )
+            language = gr.Radio(
+                choices=["es", "en"],
+                value="es",
+                label="Idioma de Whisper (es / en)",
+            )
 
         process_btn = gr.Button("Procesar audio + transcribir", variant="primary")
         process_status = gr.Markdown("")
@@ -352,7 +371,7 @@ def build_ui() -> gr.Blocks:
             do_process,
             inputs=[
                 video_in,
-                words_per_chunk, hook_max_s, color_scheme, hook_position, state,
+                words_per_chunk, hook_max_s, color_scheme, hook_position, language, state,
             ],
             outputs=[cues_table, state, process_status],
         )
@@ -381,6 +400,7 @@ def build_ui() -> gr.Blocks:
 
 
 if __name__ == "__main__":
+    purge_old_sessions(max_age_hours=24)
     ui = build_ui()
     ui.launch(
         server_name="127.0.0.1",

@@ -260,6 +260,7 @@ def cues_to_ass_sapiens(
     *,
     color_scheme: str = "teal",
     hook_layout: tuple[int, int] | None = None,
+    play_res: tuple[int, int] = (1080, 1920),
 ) -> str:
     """Genera el archivo ASS estilo Quote-Card Sapiens.
 
@@ -270,6 +271,8 @@ def cues_to_ass_sapiens(
     hook_layout: (alignment, margin_v) para override del estilo Hook. None =
         default bottom-left con MarginV=SAFE_MARGIN_V. Solo el hook se mueve
         segun deteccion de cara; el body siempre va bottom-center MarginV=360.
+    play_res: (PlayResX, PlayResY) del ASS. Default (1080, 1920) para Reels
+        vertical. Pasa (1920, 1080) para video horizontal 16:9.
     """
     accent_hex = SAPIENS_TEAL_HEX if color_scheme == "teal" else SAPIENS_GOLD_HEX
     accent = _hex_to_ass_color(accent_hex)
@@ -281,11 +284,12 @@ def cues_to_ass_sapiens(
     else:
         hook_align, hook_margin_v = hook_layout
 
+    play_x, play_y = play_res
     header = (
         "[Script Info]\n"
         "ScriptType: v4.00+\n"
-        "PlayResX: 1080\n"
-        "PlayResY: 1920\n"
+        f"PlayResX: {play_x}\n"
+        f"PlayResY: {play_y}\n"
         "WrapStyle: 2\n"
         "ScaledBorderAndShadow: yes\n"
         "YCbCr Matrix: TV.709\n"
@@ -334,9 +338,15 @@ def write_ass(
     *,
     color_scheme: str = "teal",
     hook_layout: tuple[int, int] | None = None,
+    play_res: tuple[int, int] = (1080, 1920),
 ) -> Path:
     path.write_text(
-        cues_to_ass_sapiens(cues, color_scheme=color_scheme, hook_layout=hook_layout),
+        cues_to_ass_sapiens(
+            cues,
+            color_scheme=color_scheme,
+            hook_layout=hook_layout,
+            play_res=play_res,
+        ),
         encoding="utf-8",
     )
     return path

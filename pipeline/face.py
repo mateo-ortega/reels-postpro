@@ -43,8 +43,9 @@ HOOK_HEIGHT_PADDING = 80
 # Asuncion de face_ymax cuando la deteccion falla (plano cercano conservador).
 DEFAULT_FACE_YMAX = 850  # ~44% de 1920px
 
-# Margen inferior minimo para el hook (por encima de la barra de perfil de IG).
-MIN_BOTTOM_HOOK = 150
+# Margen inferior minimo para el hook. Debe ser >= SAFE_MARGIN_V (420) de
+# subtitles.py para que el hook nunca entre en la zona de UI de Instagram.
+MIN_BOTTOM_HOOK = 420
 
 # Confidence minima de deteccion Haar para confiar en el envelope.
 MIN_FACE_CONFIDENCE = 0.20
